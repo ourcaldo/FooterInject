@@ -50,12 +50,25 @@ class AnalyticsInjector {
     
     public function init() {
         // Plugin initialization code here if needed
+        // Add custom cron interval
+        add_filter('cron_schedules', array($this, 'add_cron_interval'));
+    }
+    
+    public function add_cron_interval($schedules) {
+        $schedules['every_minute'] = array(
+            'interval' => 60, // 60 seconds = 1 minute
+            'display' => __('Every Minute')
+        );
+        return $schedules;
     }
     
     public function activate() {
-        // Schedule the cron job to run every hour
+        // Add custom cron interval for every minute
+        add_filter('cron_schedules', array($this, 'add_cron_interval'));
+        
+        // Schedule the cron job to run every minute
         if (!wp_next_scheduled($this->cron_hook)) {
-            wp_schedule_event(time(), 'hourly', $this->cron_hook);
+            wp_schedule_event(time(), 'every_minute', $this->cron_hook);
         }
         
         // Run initial check
