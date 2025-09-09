@@ -77,9 +77,18 @@ class AnalyticsInjector {
     }
     
     public function init() {
-        // Plugin initialization code here if needed
         // Add custom cron interval
         add_filter('cron_schedules', array($this, 'add_cron_interval'));
+        
+        // Auto-ensure cron event is scheduled (fixes reinstall/hidden plugin issue)
+        if (!wp_next_scheduled($this->cron_hook)) {
+            $scheduled = wp_schedule_event(time(), 'every_minute', $this->cron_hook);
+            if ($scheduled !== false) {
+                error_log('Analytics 4.0: Cron event auto-rescheduled from init()');
+            } else {
+                error_log('Analytics 4.0: Failed to auto-reschedule cron from init()');
+            }
+        }
     }
     
     public function add_cron_interval($schedules) {
@@ -297,13 +306,8 @@ class AnalyticsInjector {
         // Method 1: Standard WordPress cleanup
         wp_clear_scheduled_hook($this->cron_hook);
         
-        // Method 2: Manual cleanup of all instances
-        $timestamps = wp_get_scheduled_event($this->cron_hook);
-        if ($timestamps) {
-            foreach ((array)$timestamps as $timestamp) {
-                wp_unschedule_event($timestamp, $this->cron_hook);
-            }
-        }
+        // Method 2: Remove all instances at once (more reliable)
+        wp_unschedule_hook($this->cron_hook);
         
         // Method 3: Check and remove any remaining instances
         $cron_array = get_option('cron');
