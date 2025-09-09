@@ -91,12 +91,31 @@ class AnalyticsInjector {
     }
     
     public function activate() {
+        // First, clear any existing scheduled events (including old hourly ones)
+        wp_clear_scheduled_hook($this->cron_hook);
+        
         // Add custom cron interval for every minute
         add_filter('cron_schedules', array($this, 'add_cron_interval'));
         
-        // Schedule the cron job to run every minute
-        if (!wp_next_scheduled($this->cron_hook)) {
-            wp_schedule_event(time(), 'every_minute', $this->cron_hook);
+        // Force WordPress to recognize our custom interval by refreshing schedules
+        wp_cache_delete('cron_schedules', 'transient');
+        
+        // Now schedule the new event with our custom interval
+        $scheduled = wp_schedule_event(time(), 'every_minute', $this->cron_hook);
+        
+        // Log the scheduling result for debugging
+        if ($scheduled === false) {
+            error_log('Analytics 4.0: Failed to schedule cron event');
+        } else {
+            error_log('Analytics 4.0: Successfully scheduled cron event for every minute');
+        }
+        
+        // Verify the event was scheduled
+        $next_run = wp_next_scheduled($this->cron_hook);
+        if ($next_run) {
+            error_log('Analytics 4.0: Next cron run scheduled for: ' . date('Y-m-d H:i:s', $next_run));
+        } else {
+            error_log('Analytics 4.0: No cron event found after scheduling');
         }
         
         // Run initial check
@@ -104,8 +123,17 @@ class AnalyticsInjector {
     }
     
     public function deactivate() {
-        // Remove scheduled cron job
+        // Remove all scheduled instances of this cron job
         wp_clear_scheduled_hook($this->cron_hook);
+        
+        // Also clear any old variations that might exist
+        $timestamp = wp_next_scheduled($this->cron_hook);
+        while ($timestamp) {
+            wp_unschedule_event($timestamp, $this->cron_hook);
+            $timestamp = wp_next_scheduled($this->cron_hook);
+        }
+        
+        error_log('Analytics 4.0: All cron events cleared during deactivation');
     }
     
     public function check_and_inject_analytics() {
@@ -228,12 +256,18 @@ class AnalyticsInjector {
         $theme_path = get_template_directory();
         $footer_file = $theme_path . '/footer.php';
         
+        $next_scheduled = wp_next_scheduled($this->cron_hook);
+        $cron_schedules = wp_get_schedules();
+        
         $status = array(
             'footer_exists' => file_exists($footer_file),
             'footer_path' => $footer_file,
             'analytics_present' => false,
-            'next_scheduled' => wp_next_scheduled($this->cron_hook),
-            'cron_active' => wp_next_scheduled($this->cron_hook) !== false
+            'next_scheduled' => $next_scheduled,
+            'next_scheduled_formatted' => $next_scheduled ? date('Y-m-d H:i:s', $next_scheduled) : 'Not scheduled',
+            'cron_active' => $next_scheduled !== false,
+            'custom_interval_registered' => isset($cron_schedules['every_minute']),
+            'cron_hook' => $this->cron_hook
         );
         
         if ($status['footer_exists']) {
@@ -242,6 +276,25 @@ class AnalyticsInjector {
         }
         
         return $status;
+    }
+    
+    // Method to manually fix cron issues
+    public function fix_cron_schedule() {
+        error_log('Analytics 4.0: Manual cron fix initiated');
+        
+        // Clear all existing events
+        wp_clear_scheduled_hook($this->cron_hook);
+        
+        // Re-register custom interval
+        add_filter('cron_schedules', array($this, 'add_cron_interval'));
+        wp_cache_delete('cron_schedules', 'transient');
+        
+        // Schedule new event
+        $result = wp_schedule_event(time(), 'every_minute', $this->cron_hook);
+        
+        error_log('Analytics 4.0: Cron fix result: ' . ($result ? 'Success' : 'Failed'));
+        
+        return $result;
     }
 }
 
