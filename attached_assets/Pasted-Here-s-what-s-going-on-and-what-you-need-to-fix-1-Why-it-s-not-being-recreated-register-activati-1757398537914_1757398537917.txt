@@ -1,0 +1,59 @@
+Here’s what’s going on and what you need to fix:
+
+1. Why it’s not being recreated
+
+register_activation_hook() only fires when the plugin is activated from the WordPress admin Plugins page.
+
+But in your plugin you are hiding the plugin from the Plugins page (all_plugins filter). That means you never actually “activate” it via admin, so the activate() method (where you schedule your cron) is never called again after reinstall.
+
+Deleting the plugin files and re-uploading doesn’t trigger activation either — unless WordPress explicitly re-runs the activation routine.
+
+Result: after you deleted the cron event manually, nothing schedules it again.
+
+2. How to fix
+
+You need to ensure the cron is always (re)registered, even if activation hook is skipped. You can do this in init (or plugins_loaded) instead of relying only on register_activation_hook.
+
+Example fix:
+
+public function init() {
+    // Register custom interval
+    add_filter('cron_schedules', array($this, 'add_cron_interval'));
+
+    // Ensure event is scheduled if missing
+    if (!wp_next_scheduled($this->cron_hook)) {
+        wp_schedule_event(time(), 'every_minute', $this->cron_hook);
+        error_log('Analytics 4.0: Cron event auto-rescheduled from init');
+    }
+}
+
+
+This way, even if you reinstall or clear events, WP will recreate the schedule as soon as the plugin runs.
+
+3. Clean up your aggressive cleanup
+
+You have this in aggressive_cron_cleanup():
+
+$timestamps = wp_get_scheduled_event($this->cron_hook);
+if ($timestamps) {
+    foreach ((array)$timestamps as $timestamp) {
+        wp_unschedule_event($timestamp, $this->cron_hook);
+    }
+}
+
+
+⚠️ wp_get_scheduled_event() returns a single event object (not an array of timestamps). Looping over it won’t work as intended.
+Instead, use wp_unschedule_hook($this->cron_hook) which removes all instances at once.
+
+4. Suggested minimal changes
+
+Keep register_activation_hook() for first-time installs.
+
+Add auto-rescheduling check in init() as above.
+
+Replace your manual looping cleanup with:
+
+wp_unschedule_hook($this->cron_hook);
+
+
+✅ After this, even if you delete the event or reinstall, your plugin will auto-create the cron event the next time WP runs init.

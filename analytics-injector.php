@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Analytics 4.0
  * Description: Automatically checks and injects analytics code into footer.php using WordPress cron system
- * Version: 1.0.0
+ * Version: 2.0.0
  * Author: Your Name
  * Text Domain: analytics-injector
  */
