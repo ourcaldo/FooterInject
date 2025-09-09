@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Footer</title>
+</head>
+<body>
+    <footer>
+        <p>Test Footer Content</p>
+    </footer>
+    <?php wp_footer(); ?>
+</body>
+</html>
