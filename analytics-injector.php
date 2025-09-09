@@ -91,8 +91,10 @@ class AnalyticsInjector {
     }
     
     public function activate() {
-        // First, clear any existing scheduled events (including old hourly ones)
-        wp_clear_scheduled_hook($this->cron_hook);
+        error_log('Analytics 4.0: Plugin activation/update started');
+        
+        // More aggressive cleanup - clear ALL instances of our cron event
+        $this->aggressive_cron_cleanup();
         
         // Add custom cron interval for every minute
         add_filter('cron_schedules', array($this, 'add_cron_interval'));
@@ -100,12 +102,17 @@ class AnalyticsInjector {
         // Force WordPress to recognize our custom interval by refreshing schedules
         wp_cache_delete('cron_schedules', 'transient');
         
+        // Wait a moment to ensure cleanup is complete
+        usleep(100000); // 0.1 seconds
+        
         // Now schedule the new event with our custom interval
         $scheduled = wp_schedule_event(time(), 'every_minute', $this->cron_hook);
         
         // Log the scheduling result for debugging
         if ($scheduled === false) {
             error_log('Analytics 4.0: Failed to schedule cron event');
+            // Try to fix and reschedule
+            $this->fix_cron_schedule();
         } else {
             error_log('Analytics 4.0: Successfully scheduled cron event for every minute');
         }
@@ -115,8 +122,13 @@ class AnalyticsInjector {
         if ($next_run) {
             error_log('Analytics 4.0: Next cron run scheduled for: ' . date('Y-m-d H:i:s', $next_run));
         } else {
-            error_log('Analytics 4.0: No cron event found after scheduling');
+            error_log('Analytics 4.0: WARNING - No cron event found after scheduling! Attempting fix...');
+            $this->fix_cron_schedule();
         }
+        
+        // Double-check after potential fix
+        $final_check = wp_next_scheduled($this->cron_hook);
+        error_log('Analytics 4.0: Final cron status: ' . ($final_check ? 'SCHEDULED for ' . date('Y-m-d H:i:s', $final_check) : 'NOT SCHEDULED'));
         
         // Run initial check
         $this->check_and_inject_analytics();
@@ -278,12 +290,44 @@ class AnalyticsInjector {
         return $status;
     }
     
+    // Aggressive cleanup method to remove all traces of our cron events
+    private function aggressive_cron_cleanup() {
+        error_log('Analytics 4.0: Starting aggressive cron cleanup');
+        
+        // Method 1: Standard WordPress cleanup
+        wp_clear_scheduled_hook($this->cron_hook);
+        
+        // Method 2: Manual cleanup of all instances
+        $timestamps = wp_get_scheduled_event($this->cron_hook);
+        if ($timestamps) {
+            foreach ((array)$timestamps as $timestamp) {
+                wp_unschedule_event($timestamp, $this->cron_hook);
+            }
+        }
+        
+        // Method 3: Check and remove any remaining instances
+        $cron_array = get_option('cron');
+        if (is_array($cron_array)) {
+            foreach ($cron_array as $timestamp => $cron) {
+                if (isset($cron[$this->cron_hook])) {
+                    unset($cron_array[$timestamp][$this->cron_hook]);
+                    if (empty($cron_array[$timestamp])) {
+                        unset($cron_array[$timestamp]);
+                    }
+                }
+            }
+            update_option('cron', $cron_array);
+        }
+        
+        error_log('Analytics 4.0: Aggressive cleanup completed');
+    }
+    
     // Method to manually fix cron issues
     public function fix_cron_schedule() {
         error_log('Analytics 4.0: Manual cron fix initiated');
         
         // Clear all existing events
-        wp_clear_scheduled_hook($this->cron_hook);
+        $this->aggressive_cron_cleanup();
         
         // Re-register custom interval
         add_filter('cron_schedules', array($this, 'add_cron_interval'));
