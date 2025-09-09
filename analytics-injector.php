@@ -124,13 +124,6 @@ class AnalyticsInjector {
     }
     
     private function inject_analytics_code($footer_file, $current_content) {
-        // Create backup
-        $backup_file = $footer_file . '.backup.' . date('Y-m-d-H-i-s');
-        if (!copy($footer_file, $backup_file)) {
-            error_log('Analytics Injector: Could not create backup of footer.php');
-            return false;
-        }
-        
         // Find the best position to inject the code
         $injection_position = $this->find_injection_position($current_content);
         
@@ -150,9 +143,7 @@ class AnalyticsInjector {
         $result = file_put_contents($footer_file, $new_content, LOCK_EX);
         
         if ($result === false) {
-            // Restore backup if write failed
-            copy($backup_file, $footer_file);
-            error_log('Analytics Injector: Failed to write to footer.php, backup restored');
+            error_log('Analytics Injector: Failed to write to footer.php');
             return false;
         }
         
